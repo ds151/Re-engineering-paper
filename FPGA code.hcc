@@ -1,0 +1,639 @@
+/**********************************************************************
+
+* Project    :  NXT re-engineering                                    *
+* Date       :  September 2010                                        *
+* File       :  fpga.hcc                                              *
+* Author     :  Daniel Slipper                                        *
+
+**********************************************************************/
+
+/*
+ * For simulation, use a pretend clock rate close to real time; 1MHz
+ */
+
+#include "pal_master.hch"
+#include "stdlib.hch"
+#include "pal_console_private.hch"
+#include "motor.hch"
+
+
+typedef  unsigned 32 uint32;
+//Set clock to 1.33MHz
+set clock = external_divide "V12" 100;
+static macro expr ClockRate = 1330000;
+
+
+unsigned int 1 AD_CONV;
+unsigned int 1 ADC_OUT;
+static unsigned int 1 SPI_SCK= 0;
+unsigned int 1 SPI_MOSI;
+unsigned int 1 AMP_CS;
+unsigned int 1 AMP_SHDN;
+unsigned int 1 DAC_CLR;
+
+interface bus_out () AD_CONVBus(unsigned int 1 OutPort=AD_CONV) with {data = {"Y6"}}; 
+interface bus_out () SPI_SCKBus(unsigned int 1 OutPort=SPI_SCK) with {data = {"AA20"}};
+interface bus_out () SPI_MOSIBus(unsigned int 1 OutPort=SPI_MOSI) with {data = {"AB14"}}; 
+interface bus_out () AMP_CSBus(unsigned int 1 OutPort=AMP_CS) with {data = {"W6"}};
+interface bus_out () AMP_SHDNBus(unsigned int 1 OutPort=AMP_SHDN) with {data = {"W15"}};
+interface bus_out () DAC_CLRBus(unsigned int 1 OutPort=DAC_CLR) with {data = {"AB13"}};
+
+interface bus_in(unsigned 1 To) ADC_OUTBus() with {data = {"D16"}}; 
+interface bus_in(unsigned 1 To) AMP_DOUTBus() with {data = {"T7"}};
+
+unsigned int 2 MotorASpeed;
+unsigned int 2 MotorBSpeed;
+
+static interface bus_out () MotorA(unsigned int 2 OutPort=MotorASpeed) with {data = {"C10", "A10"}}; 
+static interface bus_out () MotorB(unsigned int 2 OutPort=MotorBSpeed) with {data = {"A11", "A12"}};
+
+//TACHOMETERS
+interface bus_in(unsigned 2 To) TachA() with {data = {"A4", "B4"}}; 
+interface bus_in(unsigned 2 To) TachB() with {data = {"A5", "B6"}}; 
+
+/*
+ * Globals for sensor values
+ */
+
+int 1 touch;
+int 1 light;   
+
+/*
+ * Forward declarations
+ */
+static macro proc Sleep (Milliseconds);
+static macro proc SetGain();
+static macro proc ADC_Read(fromTouch);
+static macro proc Motor1(toMotorA);
+static macro proc Motor2(toMotorB);
+static macro proc ControlCode(fromTouch, fromLight, toMotorA, toMotorB, reqTouch, reqLight, reqTachA, reqTachB, motorATach, motorBTach);
+static macro proc LightSensor(fromLight, reqLight);
+static macro proc Test(fromLight, fromTouch, reqTouch, reqLight);
+static macro proc TouchSensor(fromTouch, reqTouch);
+static macro proc Motor1Tach(motorATach, reqTachA);
+static macro proc Motor2Tach(motorATach, reqTachA);
+
+
+/*
+ * Main program
+ */
+void main (void)
+{
+    
+    chan int 1 fromTouch;    
+    chan int 1 fromLight;
+    chan int 1 reqTouch;
+    chan int 1 reqLight;
+    chan int 32 toMotorA;
+    chan int 32 toMotorB;
+    chan int 32 motorATach;  
+    chan int 32 motorBTach;
+    chan int 1 reqTachA;
+    chan int 1 reqTachB;
+    
+    
+    /*
+     * Check that the required resources are available on the compilation target
+     */
+    PalVersionRequire (1, 0);
+    PalLEDRequire     (1);
+    SetGain();       
+    par{
+        //Reads adc values from both channels
+        ADC_Read(fromTouch);
+        LightSensor(fromLight, reqLight);
+        TouchSensor(fromTouch, reqTouch);
+        Motor1(toMotorA);
+        Motor2(toMotorB);
+        ControlCode(fromTouch, fromLight, toMotorA, toMotorB, reqTouch, reqLight, reqTachA, reqTachB, motorATach, motorBTach);
+        Motor1Tach(motorATach, reqTachA);
+        Motor2Tach(motorBTach, reqTachB);
+    }
+}
+
+static macro proc LightSensor(fromLight, reqLight){
+    int 1 temp;
+    while(1){
+        reqLight ? temp;
+        fromLight ! light;
+    }        
+}
+
+static macro proc TouchSensor(fromTouch, reqTouch){
+    int 1 temp;
+    while(1){
+        reqTouch ? temp;
+        fromTouch ! touch;
+    }    
+}
+
+
+/*
+ * Set the gain of the ADC before use
+ */
+static macro proc SetGain()
+{
+//Ensure the shutdown pin is off.
+    unsigned int 1 dout;
+    
+    AMP_SHDN = 0;
+    AMP_CS= 1;
+    SPI_MOSI= 1;
+    SPI_SCK = 0;
+    
+    
+    //Set gain begins
+    AMP_CS= 0; 
+    
+    //B3
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 1; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 0; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    SPI_MOSI= 1; SPI_SCK= 1; dout = AMP_DOUTBus.To; SPI_SCK= 0;
+    
+    AMP_CS= 1; 
+    
+    SPI_SCK= 1; 
+    SPI_SCK= 0; 
+    SPI_SCK= 1; 
+    SPI_SCK= 0; 
+    SPI_SCK= 1; 
+    SPI_SCK= 0; 
+}
+
+static macro proc ADC_Read(fromTouch)
+{
+    unsigned int 1 ADCIN;
+    unsigned int 1 temp[16];
+    unsigned int 4 i; 
+    unsigned int 1 flash;
+    
+    
+    //Ensure DAC is disabled (in reset mode)
+    DAC_CLR = 0;
+    flash = 0;
+    Sleep(1000);
+    while(1)
+    {
+        AD_CONV = 0;
+        SPI_SCK = 0;
+                
+        //Start conversion
+        AD_CONV = 1;
+        SPI_SCK= 1;  
+        AD_CONV = 0; 
+        SPI_SCK= 0;
+        
+        //2 Clocks
+        SPI_SCK= 1;
+        SPI_SCK= 0;
+        
+        //Start channel 1
+        
+        SPI_SCK= 1;
+        temp[13]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[12]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[11]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+
+        SPI_SCK= 1;
+        temp[10]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[9]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+
+        SPI_SCK= 1;
+        temp[8]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[7]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[6]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[5]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[4]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[3]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[2]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[1]= ADC_OUTBus.To;
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1; 
+        temp[0]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        //For Touch sensor
+        
+        if((temp[13] == 0) && temp[12] && temp[11] && temp[10] && temp[9] && temp[8]){
+            touch = 1;
+            PalLEDWrite (PalLEDCT (0), 1);
+            
+        }else{
+            touch = 0;
+            PalLEDWrite (PalLEDCT (0), 0);
+        }
+        
+        //2 clocks before next data
+        
+        SPI_SCK= 1; 
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1; 
+        SPI_SCK= 0; 
+        
+        
+        //Start channel 2
+                
+        SPI_SCK= 1; 
+        temp[13]= ADC_OUTBus.To; 
+        //PalLEDWrite (PalLEDCT (7), temp[13]);
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[12]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (6), temp[12]);
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1; 
+        temp[11]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (5), temp[11]);
+        SPI_SCK= 0;
+
+        SPI_SCK= 1;
+        temp[10]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (4), temp[10]);
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1; 
+        temp[9]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (3), temp[9]);
+        SPI_SCK= 0;
+
+        SPI_SCK= 1;
+        temp[8]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (2), temp[8]);
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[7]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (1), temp[7]);
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1;
+        temp[6]= ADC_OUTBus.To;
+        //PalLEDWrite (PalLEDCT (0), temp[6]);
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[5]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[4]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[3]= ADC_OUTBus.To; 
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[2]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+        SPI_SCK= 1;
+        temp[1]= ADC_OUTBus.To;
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1; 
+        temp[0]= ADC_OUTBus.To;
+        SPI_SCK= 0;
+        
+
+        if((temp[13] == 0) && temp[12] && temp[11] && temp[10] && temp[9] && temp[8]){
+            light = 1;
+            PalLEDWrite (PalLEDCT (7), 1);
+            
+        }else{
+            light = 0;
+            PalLEDWrite (PalLEDCT (7), 0);
+        }
+
+        SPI_SCK= 1; 
+        SPI_SCK= 0; 
+        
+        SPI_SCK= 1; 
+        SPI_SCK= 0; 
+
+    }
+    
+}
+
+static macro proc Motor1(toMotorA){
+    int 32 speed;  
+    int 32 i;
+    while(1){
+        prialt{
+            case toMotorA ? speed:
+                
+            break;
+            default:
+                
+            break;
+        }
+
+        if(speed > 0){
+            MotorASpeed = 3;
+            for(i=0;i<speed;i++) delay;
+            MotorASpeed = 0;
+            for(i=0;i<(100-speed);i++) delay;
+            MotorASpeed = 3;
+        }else{
+            if(speed == 0){
+                MotorASpeed = 0;
+            }else{
+                MotorASpeed = 2;
+                for(i=0;i>speed;i--) delay;                            
+                MotorASpeed = 0;
+                for(i=0;i<(speed+100);i++) delay;
+                MotorASpeed = 2;
+            }
+        }
+    }
+
+}
+
+
+static macro proc Motor2(toMotorB){
+    int 32 speed;    
+    int 32 i;
+    while(1){
+        prialt{
+            case toMotorB ? speed:
+            
+            break;
+
+            default:
+
+            break;
+        }
+        
+        if(speed > 0){
+            MotorBSpeed = 3;
+            for(i=0;i<speed;i++) delay;
+            MotorBSpeed = 0;
+            for(i=0;i<(100-speed);i++) delay;
+            MotorBSpeed = 3;
+        }else{
+            if(speed == 0){
+                MotorBSpeed = 0;
+            }else{
+                MotorBSpeed = 2;
+                for(i=0;i>speed;i--) delay;                            
+                MotorBSpeed = 0;
+                for(i=0;i<(speed+100);i++) delay;
+                MotorBSpeed = 2;
+            }
+        }
+    }
+}
+
+
+static macro proc ControlCode(fromTouch, fromLight, toMotorA, toMotorB, reqTouch, reqLight, reqTachA, reqTachB, motorATach, motorBTach){
+    int 32 tach;
+    int 1 light;
+    int 32 target;
+    tach = 0;
+    target = 0;
+    
+    Sleep(10000);
+    PalLEDWrite (PalLEDCT (4), 1);
+
+    par{
+        toMotorA ! 70;
+        toMotorB ! 70;
+    }
+    reqLight ! 0;
+    fromLight ? light;
+    while(light == 0){
+        reqLight ! 0;
+        fromLight ? light;        
+    }
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;
+    }
+    Sleep(2000);
+    par{
+        toMotorA ! -90;
+        toMotorB ! -90;
+    }
+    Sleep(1000);
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;
+    }
+    Sleep(500);
+    par{
+        toMotorA ! 60;
+        toMotorB ! 100;
+    }
+    reqTachB ! 0;
+    motorBTach ? tach;
+    target = tach + 1000;
+    while(tach < target){
+        reqTachB ! 0;
+        motorBTach ? tach;
+    }
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;
+    }
+    Sleep(1000);
+
+    par{
+        toMotorA ! -100;
+        toMotorB ! -60;
+    }
+    reqTachB ! 0;
+    motorBTach ? tach;
+    target = tach + 800;
+    while(tach < target){
+        reqTachB ! 0;
+        motorBTach ? tach;
+    }
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;
+    }
+    Sleep(1000);    
+    
+
+    par{
+        toMotorA ! 100;
+        toMotorB ! 100;
+    }
+    Sleep(500);
+    par{
+        toMotorA ! 90;
+        toMotorB ! 90;
+    }
+    Sleep(500);
+    par{
+        toMotorA ! 80;
+        toMotorB ! 80;
+    }
+    Sleep(500);
+    par{
+        toMotorA ! 70;
+        toMotorB ! 70;
+    }
+    Sleep(500);    
+    par{
+        toMotorA ! 60;
+        toMotorB ! 60;
+    }
+    Sleep(500);     
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;
+    }
+    Sleep(500);       
+    
+    
+    par{
+        toMotorA ! -100;
+        toMotorB ! 100;
+    }
+    reqTachB ! 0;
+    motorBTach ? tach;
+    target = tach + 800;
+    while(tach < target){
+        reqTachB ! 0;
+        motorBTach ? tach;
+    }    
+    
+    par{
+        toMotorA ! 0;
+        toMotorB ! 0;            
+    }
+    
+    Sleep(1000);
+    
+    while(1){
+        
+        
+    }
+    
+}
+
+
+static macro proc Motor1Tach(motorATach, reqTachA){
+    unsigned int 2 previous;
+    unsigned int 2 tach;
+    int 32 count;
+    int 32 oldcount;
+    unsigned int 4 quad;
+    int 1 temp;
+    tach = 0;
+    count = 0;
+    quad = 0;
+    temp = 0;
+    while(1){
+        oldcount = count;
+        prialt{
+          case reqTachA ? temp:
+            motorATach ! count;
+          break;
+            
+          default:
+          break;
+        }
+        previous = tach;
+        tach = TachA.To;
+        if(tach != previous){
+            quad++;
+            if(quad == 4){
+                quad = 0;
+                count++;
+            }
+        }
+    }   
+}
+
+static macro proc Motor2Tach(motorBTach, reqTachB){
+    unsigned int 2 previous;
+    unsigned int 2 tach;
+    int 32 count;
+    int 32 oldcount;
+    unsigned int 4 quad;
+    int 1 temp;
+    tach = 0;
+    count = 0;
+    quad = 0;
+    temp = 0;
+    while(1){
+        oldcount = count;
+
+        prialt{
+          case reqTachB ? temp:
+            motorBTach ! count;
+          break;
+            
+          default:
+          break;
+        }
+        previous = tach;
+        tach = TachB.To;
+        if(tach != previous){
+            quad++;
+            if(quad == 4){
+                quad = 0;
+                count++;
+            }
+        }
+    }   
+}
+
+
+
+/*
+ * Sleep for "n" milliseconds by counting clock cycles
+ */
+static macro proc Sleep (Milliseconds)
+{
+    uint32 Count;
+
+    Count = ((ClockRate * Milliseconds) / 1000) - 1;
+    while (Count > 0) Count--;
+}
+
+
+
