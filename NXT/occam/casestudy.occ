@@ -1,0 +1,152 @@
+#INCLUDE "nxt2.inc"
+
+PROC do.delay(VAL INT us)
+  TIMER tim:
+  INT t:
+  SEQ
+    tim ? t
+    t := t PLUS us
+    tim ? AFTER t
+:
+
+PROC controlCode(CHAN INT motorASpeed, motorBSpeed, fromLight, fromTouch, reqLight, reqTouch, fromTachA, reqTachA, fromTachB, reqTachB)
+
+  INT light, touch, started, tacha, tachb, target:
+  SEQ
+    light := 800
+    touch := 0
+    started := 0
+    tacha := 0
+    tachb := 0
+    target := 0
+    do.delay(5000)
+    C.tvmspecial.0.nx.display.clear()
+    
+     --First straight
+    PAR
+      motorASpeed ! 70
+      motorBSpeed ! 70
+    reqLight ! 0
+    fromLight ? light
+    WHILE light > 800
+      SEQ
+        reqLight ! 0
+        fromLight ? light
+    PAR
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(2000)
+    PAR
+      motorASpeed ! -90
+      motorBSpeed ! -90
+    do.delay(1000)
+    PAR 
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(500)
+    PAR
+      motorASpeed ! 60
+      motorBSpeed ! 100
+     
+    reqTachB ! 0
+    fromTachB ? tachb 
+    target := tachb + 1000
+    WHILE tachb < target
+      SEQ
+        reqTachB ! 0
+        fromTachB ? tachb
+    PAR
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(1000)
+    PAR
+      motorASpeed ! -100
+      motorBSpeed ! -60
+  
+    reqTachB ! 0
+    fromTachB ? tachb
+    target := tachb - 800
+    WHILE tachb > target
+      SEQ
+        reqTachB ! 0
+        fromTachB ? tachb
+    
+    PAR
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(1000)
+
+    PAR
+      motorASpeed ! 100
+      motorBSpeed ! 100
+    do.delay(500)
+    PAR
+      motorASpeed ! 90
+      motorBSpeed ! 90
+    do.delay(500)
+    PAR
+      motorASpeed ! 80
+      motorBSpeed ! 80
+    do.delay(500)
+    PAR
+      motorASpeed ! 70
+      motorBSpeed ! 70
+    do.delay(500)
+    PAR
+      motorASpeed ! 60
+      motorBSpeed ! 60
+    do.delay(500)
+    PAR
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(500)
+
+    PAR
+      motorASpeed ! -100
+      motorBSpeed ! 100
+
+    reqTachA ! 0
+    fromTachA ? tacha
+    target := tacha - 500
+
+    WHILE tacha > target
+      SEQ
+        reqTachA ! 0
+        fromTachA ? tacha
+    PAR
+      motorASpeed ! 0
+      motorBSpeed ! 0
+    do.delay(1000)
+
+    STOP
+--    PAR
+--      motorASpeed ! -100
+--      motorBSpeed ! 100
+--    WHILE tacha < 750
+--      SEQ
+--        reqTachA ! 0
+--        fromTachA ? tacha
+--    PAR
+--      motorASpeed ! 0
+--      motorBSpeed ! 0
+--    STOP
+:
+
+
+PROC main ()    
+  CHAN INT motorASpeed, motorBSpeed, fromTouch, fromLight, reqLight, reqTouch, fromTachA, reqTachA, fromTachB, reqTachB:
+  INT tach:
+  SEQ
+    C.tvmspecial.12.nx.sensors.analog.init(0)
+    C.tvmspecial.12.nx.sensors.analog.init(1) 
+    C.tvmspecial.2.nx.display.string("IN main process")    
+    PAR
+      motorA(motorASpeed)
+      motorB(motorBSpeed)
+      tachCountA(fromTachA, reqTachA)
+      tachCountB(fromTachB, reqTachB)
+      sensorLightA(fromLight, reqLight)
+      sensorTouchB(fromTouch, reqTouch)
+      controlCode(motorASpeed, motorBSpeed, fromLight, fromTouch, reqLight, reqTouch, fromTachA, reqTachA, fromTachB, reqTachB)
+
+:

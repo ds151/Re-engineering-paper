@@ -1,0 +1,39 @@
+scheduler.o: ../../../runtime/libtvm/scheduler.c \
+ ../../../runtime/libtvm/tvm.h tvm_config.h \
+ ../../../runtime/libtvm/tvm_compiler.h \
+ /home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/include/stddef.h \
+ ../../../runtime/libtvm/tvm_types.h \
+ /home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/../../../../arm-elf/sys-include/inttypes.h \
+ /home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/../../../../arm-elf/sys-include/stdint.h \
+ ../../../runtime/libtvm/transputer.h ../../../runtime/libtvm/tvm_mem.h \
+ ../../../runtime/libtvm/tvm_mem_intf.h \
+ ../../../runtime/libtvm/tvm_time.h ../../../runtime/libtvm/interpreter.h \
+ config.h ../../../runtime/libtvm/scheduler.h
+
+../../../runtime/libtvm/tvm.h:
+
+tvm_config.h:
+
+../../../runtime/libtvm/tvm_compiler.h:
+
+/home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/include/stddef.h:
+
+../../../runtime/libtvm/tvm_types.h:
+
+/home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/../../../../arm-elf/sys-include/inttypes.h:
+
+/home/dan/mindstorm/scripts/install/lib/gcc/arm-elf/4.4.0/../../../../arm-elf/sys-include/stdint.h:
+
+../../../runtime/libtvm/transputer.h:
+
+../../../runtime/libtvm/tvm_mem.h:
+
+../../../runtime/libtvm/tvm_mem_intf.h:
+
+../../../runtime/libtvm/tvm_time.h:
+
+../../../runtime/libtvm/interpreter.h:
+
+config.h:
+
+../../../runtime/libtvm/scheduler.h:
